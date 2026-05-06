@@ -1,0 +1,45 @@
+{
+  "name": "my-hrms",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "db:generate": "prisma generate",
+    "seed": "tsx prisma/seed.ts",
+    "seed:employees": "tsx prisma/seed-employees.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.8.0",
+    "bcryptjs": "^3.0.2",
+    "cloudinary": "^2.10.0",
+    "next": "^15.3.3",
+    "next-auth": "^4.24.14",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^3.8.1",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^22",
+    "@types/react": "^18.3.1",
+    "@types/react-dom": "^18.3.1",
+    "autoprefixer": "^10.5.0",
+    "eslint": "^9",
+    "eslint-config-next": "^15.3.3",
+    "postcss": "^8.5.3",
+    "prisma": "^6.8.0",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.3"
+  },
+  "overrides": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}

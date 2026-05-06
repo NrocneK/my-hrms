@@ -1,0 +1,262 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  LEADER // Trưởng phòng — gắn với 1 department
+  EMPLOYEE
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  HALF_DAY
+  LEAVE
+}
+
+enum LeaveType {
+  ANNUAL // Nghỉ phép năm
+  SICK // Nghỉ bệnh
+  PERSONAL // Việc cá nhân
+  MATERNITY // Thai sản
+  UNPAID // Không lương
+}
+
+// PENDING          → Chờ leader phòng duyệt
+// LEADER_APPROVED  → Leader phòng đã duyệt, chờ leader HR xác nhận
+// APPROVED         → Leader HR xác nhận, có hiệu lực
+// REJECTED         → Bị từ chối (ở bất kỳ vòng nào)
+// CANCELLED        → Nhân viên tự hủy (chỉ khi còn PENDING)
+enum LeaveStatus {
+  PENDING
+  LEADER_APPROVED
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+// Tương tự LeaveStatus — đơn bổ sung công cũng qua 2 vòng
+enum CorrectionStatus {
+  PENDING
+  LEADER_APPROVED
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+// ─────────────────────────────────────────
+// MODELS
+// ─────────────────────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  loginId   String   @unique @default("") // Mã NV (EMP0001) hoặc "admin" cho admin
+  password  String
+  role      Role     @default(EMPLOYEE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employee Employee?
+
+  @@map("users")
+}
+
+model Department {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  isHR        Boolean  @default(false) // Đánh dấu đây là phòng Nhân sự
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Leader của phòng ban này
+  leaderId String?   @unique
+  leader   Employee? @relation("DepartmentLeader", fields: [leaderId], references: [id])
+
+  employees Employee[] @relation("DepartmentEmployees")
+
+  @@map("departments")
+}
+
+model Employee {
+  id           String    @id @default(cuid())
+  employeeCode String    @unique
+  fullName     String
+  phone        String?
+  gender       Gender    @default(MALE)
+  dateOfBirth  DateTime?
+  address      String?
+  position     String
+  salary       Float     @default(0)
+  joinDate     DateTime  @default(now())
+  avatarUrl    String?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  departmentId String
+  department   Department @relation("DepartmentEmployees", fields: [departmentId], references: [id])
+
+  // Nếu employee này là leader → department sẽ có leaderId trỏ về đây
+  leadingDepartment Department? @relation("DepartmentLeader")
+
+  attendances           Attendance[]
+  leaveRequests         LeaveRequest[]
+  attendanceCorrections AttendanceCorrection[]
+  leaveBalances         LeaveBalance[]
+
+  @@index([departmentId])
+  @@map("employees")
+}
+
+model Attendance {
+  id        String           @id @default(cuid())
+  date      DateTime         @db.Date
+  checkIn   DateTime?
+  checkOut  DateTime?
+  status    AttendanceStatus @default(PRESENT)
+  note      String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, date])
+  @@index([employeeId])
+  @@map("attendances")
+}
+
+enum NotificationType {
+  LEAVE_SUBMITTED // NV gửi đơn → Leader nhận
+  LEAVE_LEADER_APPROVED // Leader duyệt → HR nhận
+  LEAVE_APPROVED // HR duyệt → NV nhận
+  LEAVE_REJECTED // Bị từ chối → NV nhận
+  CORRECTION_SUBMITTED // NV gửi đơn bổ sung → Leader nhận
+  CORRECTION_LEADER_APPROVED // Leader duyệt → HR nhận
+  CORRECTION_APPROVED // HR duyệt → NV nhận
+  CORRECTION_REJECTED // Bị từ chối → NV nhận
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String // người nhận
+  type      NotificationType
+  title     String
+  message   String
+  link      String? // URL để navigate khi click
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+enum HolidayType {
+  PUBLIC // Ngày lễ quốc gia
+  COMPANY // Ngày nghỉ bù / công ty tự quy định
+}
+
+model Holiday {
+  id        String      @id @default(cuid())
+  name      String
+  date      DateTime    @db.Date
+  type      HolidayType @default(PUBLIC)
+  year      Int
+  createdAt DateTime    @default(now())
+
+  @@unique([date])
+  @@index([year])
+  @@map("holidays")
+}
+
+model LeaveBalance {
+  id         String   @id @default(cuid())
+  employeeId String
+  year       Int
+  totalDays  Int      @default(12) // Tổng ngày phép được cấp
+  usedDays   Float    @default(0) // Đã dùng (tính từ đơn APPROVED)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, year])
+  @@index([employeeId])
+  @@map("leave_balances")
+}
+
+model LeaveRequest {
+  id        String      @id @default(cuid())
+  type      LeaveType   @default(ANNUAL)
+  status    LeaveStatus @default(PENDING)
+  startDate DateTime    @db.Date
+  endDate   DateTime    @db.Date
+  totalDays Int
+  reason    String      @db.Text
+
+  // Vòng 1: Leader phòng
+  leaderNote String?
+  leaderAt   DateTime?
+
+  // Vòng 2: Leader HR
+  hrNote String?
+  hrAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@map("leave_requests")
+}
+
+model AttendanceCorrection {
+  id       String           @id @default(cuid())
+  date     DateTime         @db.Date
+  checkIn  DateTime // Giờ vào muốn bổ sung
+  checkOut DateTime // Giờ ra muốn bổ sung
+  reason   String           @db.Text
+  status   CorrectionStatus @default(PENDING)
+
+  // Vòng 1: Leader phòng
+  leaderNote String?
+  leaderAt   DateTime?
+
+  // Vòng 2: Leader HR
+  hrNote String?
+  hrAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId])
+  @@map("attendance_corrections")
+}
